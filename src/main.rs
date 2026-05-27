@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use mini_vec_engine::bench_infra::bench_env::EnvSnapshot;
 use mini_vec_engine::bench_infra::timer;
-use mini_vec_engine::engine::{self, data_gen, QueryParams};
+use mini_vec_engine::engine::{self, data_gen, instrumented, QueryParams};
 
 fn main() {
     let total_rows = 10_000_000;
@@ -42,11 +42,11 @@ fn main() {
 
     let params = QueryParams { threshold };
 
-    // --- Naive ---
+    // --- Naive (instrumented) ---
     println!("--- Naive (row-by-row) ---");
     let before = EnvSnapshot::take();
     let start = Instant::now();
-    let naive_results = engine::naive::execute(&batches, &params);
+    let (naive_results, naive_lat) = instrumented::execute_naive(&batches, &params);
     let naive_time = start.elapsed();
     let after = EnvSnapshot::take();
     let clean = before.isolation_clean(&after);
@@ -56,13 +56,14 @@ fn main() {
         total_rows as f64 / naive_time.as_secs_f64(),
         clean
     );
-    println!("Groups: {}\n", naive_results.len());
+    println!("Groups: {}", naive_results.len());
+    naive_lat.print_reports("Naive", ghz);
 
-    // --- Vectorized Early Materialization ---
-    println!("--- Vectorized (early materialization) ---");
+    // --- Vectorized Early (instrumented) ---
+    println!("\n--- Vectorized (early materialization) ---");
     let before = EnvSnapshot::take();
     let start = Instant::now();
-    let early_results = engine::vectorized::execute_early(&batches, &params);
+    let (early_results, early_lat) = instrumented::execute_early(&batches, &params);
     let early_time = start.elapsed();
     let after = EnvSnapshot::take();
     let clean = before.isolation_clean(&after);
@@ -76,13 +77,14 @@ fn main() {
         naive_results, early_results,
         "Early materialization results mismatch!"
     );
-    println!("Results match naive\n");
+    println!("Results match naive");
+    early_lat.print_reports("Early", ghz);
 
-    // --- Vectorized Late Materialization ---
-    println!("--- Vectorized (late materialization) ---");
+    // --- Vectorized Late (instrumented) ---
+    println!("\n--- Vectorized (late materialization) ---");
     let before = EnvSnapshot::take();
     let start = Instant::now();
-    let late_results = engine::vectorized::execute_late(&batches, &params);
+    let (late_results, late_lat) = instrumented::execute_late(&batches, &params);
     let late_time = start.elapsed();
     let after = EnvSnapshot::take();
     let clean = before.isolation_clean(&after);
@@ -97,13 +99,11 @@ fn main() {
         "Late materialization results mismatch!"
     );
     let late_speedup = naive_time.as_secs_f64() / late_time.as_secs_f64();
-    println!(
-        "Results match naive | Late vs Naive: {:.2}x\n",
-        late_speedup
-    );
+    println!("Results match naive | Late vs Naive: {:.2}x", late_speedup);
+    late_lat.print_reports("Late", ghz);
 
     // --- Parallel ---
-    println!("--- Parallel (rayon + two-phase merge) ---");
+    println!("\n--- Parallel (rayon + two-phase merge) ---");
     let before = EnvSnapshot::take();
     let start = Instant::now();
     let parallel_results = engine::parallel::execute(&batches, &params);
@@ -122,12 +122,12 @@ fn main() {
     );
     let parallel_speedup = naive_time.as_secs_f64() / parallel_time.as_secs_f64();
     println!(
-        "Results match naive | Parallel vs Naive: {:.2}x\n",
+        "Results match naive | Parallel vs Naive: {:.2}x",
         parallel_speedup
     );
 
-    // --- Summary ---
-    println!("=== Summary ===");
+    // --- Summary Table ---
+    println!("\n=== Summary ===");
     println!("| Engine | Time (ms) | Throughput (rows/s) | Speedup |");
     println!("|--------|-----------|---------------------|---------|");
     println!(
@@ -153,6 +153,20 @@ fn main() {
         total_rows as f64 / parallel_time.as_secs_f64(),
         parallel_speedup
     );
+
+    // --- Per-stage Latency Percentiles ---
+    println!("\n=== Per-stage Latency (ns) ===");
+    println!("| Engine | Stage | p50 | p99 | p99.9 | p99.99 | max | n |");
+    println!("|--------|-------|-----|-----|-------|--------|-----|---|");
+    for row in naive_lat.to_markdown_rows("Naive", ghz) {
+        println!("{row}");
+    }
+    for row in early_lat.to_markdown_rows("Early", ghz) {
+        println!("{row}");
+    }
+    for row in late_lat.to_markdown_rows("Late", ghz) {
+        println!("{row}");
+    }
 
     println!("\nTop 10 groups:");
     for r in naive_results.iter().take(10) {

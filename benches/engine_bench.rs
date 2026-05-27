@@ -63,5 +63,72 @@ fn bench_selectivity(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_engines, bench_selectivity);
+fn bench_scaling(c: &mut Criterion) {
+    let total_rows = 1_000_000;
+    let config = data_gen::DataGenConfig {
+        total_rows,
+        n_distinct_keys: 100,
+        val_min: 0,
+        val_max: 1000,
+        seed: 42,
+    };
+    let batches = data_gen::generate_batches(&config);
+    let params = QueryParams { threshold: 500 };
+
+    let mut group = c.benchmark_group("parallel_scaling");
+    group.throughput(Throughput::Elements(total_rows as u64));
+    group.sample_size(10);
+
+    for n_threads in [1, 2, 4, 8] {
+        group.bench_with_input(
+            BenchmarkId::new("threads", n_threads),
+            &n_threads,
+            |b, &n_threads| {
+                let pool = rayon::ThreadPoolBuilder::new()
+                    .num_threads(n_threads)
+                    .build()
+                    .unwrap();
+                b.iter(|| pool.install(|| engine::parallel::execute(&batches, &params)))
+            },
+        );
+    }
+
+    group.finish();
+}
+
+fn bench_cardinality(c: &mut Criterion) {
+    let total_rows = 1_000_000;
+
+    let mut group = c.benchmark_group("key_cardinality");
+    group.throughput(Throughput::Elements(total_rows as u64));
+    group.sample_size(20);
+
+    for n_keys in [10u32, 100, 1_000, 10_000] {
+        let config = data_gen::DataGenConfig {
+            total_rows,
+            n_distinct_keys: n_keys,
+            val_min: 0,
+            val_max: 1000,
+            seed: 42,
+        };
+        let batches = data_gen::generate_batches(&config);
+        let params = QueryParams { threshold: 500 };
+
+        group.bench_with_input(
+            BenchmarkId::new("keys", n_keys),
+            &(batches, params),
+            |b, (batches, params)| b.iter(|| engine::vectorized::execute_late(batches, params)),
+        );
+    }
+
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_engines,
+    bench_selectivity,
+    bench_scaling,
+    bench_cardinality
+);
 criterion_main!(benches);

@@ -36,6 +36,7 @@ pub struct QueryParams {
 
 pub mod aggregate;
 pub mod data_gen;
+pub mod instrumented;
 pub mod naive;
 pub mod parallel;
 pub mod vectorized;
