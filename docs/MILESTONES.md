@@ -1,79 +1,103 @@
-# 里程碑与执行状态
+# Milestones & Execution Status
 
-> ✅ = 已完成 | 🔜 = 进行中 | ⏳ = 未开始
+> ✅ = Complete | 🔜 = In Progress | ⏳ = Not Started
 >
-> 最后更新：2026-05-28
+> Last updated: 2026-05-28
 
-| 里程碑 | 验收标准 | 时点 | 状态 |
+| Milestone | Acceptance Criteria | Target | Status |
 |---|---|---|---|
-| M0 占位仓库 | `hft-latency-lab` public repo 已创建 | 第 0 天 | ✅ |
-| M0.5 HFT 收尾 | HFT 方法论修完 + KNOWN_LIMITATIONS + 博客发布 + 仓库冻结 | 第 -2~0 周 | ✅（博客 🔜） |
-| M1 地图建成 | 徒手画 DataFusion 查询数据流 + Arrow 内存布局 + `DESIGN.md` + `mini-vec-engine` repo 上线 | 第 2 周 | ✅ |
-| M2 内核读通 | 口头复述 filter/aggregate kernel + CMU 15-721 核心 4 章看完 | 第 6 周 | ⏳ |
-| M3 造轮子 | `mini-vec-engine` 公开发布，含 late materialization + differential test + perf benchmark + 技术博客 | 第 11 周 | ✅ |
-| M4 首次贡献 | ≥1 个 PR 已提交并在 review 中 | 第 14 周 | ⏳ |
-| M5 性能贡献 | ≥2 个 PR 在 review 中，≥1 个 merged，至少一个带 benchmark 的性能优化 | 第 16 周 | ⏳ |
-| M6 专精/前沿 | 子系统常驻贡献者 / 参与成熟 Epic 子任务 / 啃 DuckDB C++ | 第 17 周+ | ⏳ |
+| M0 Placeholder repo | `hft-latency-lab` public repo created | Day 0 | ✅ |
+| M0.5 HFT wrap-up | HFT methodology fixes + KNOWN_LIMITATIONS + blog + repo freeze | Week -2~0 | ✅ (blog 🔜) |
+| M1 Map built | Hand-drawn DataFusion query dataflow + Arrow memory layout + `DESIGN.md` + `mini-vec-engine` repo live | Week 2 | ✅ |
+| M2 Kernels read | Recite filter/aggregate kernels + CMU 15-721 core 4 chapters | Week 6 | ⏳ |
+| M3 Build wheels | `mini-vec-engine` published with late materialization + differential test + perf benchmark + tech blog | Week 11 | ✅ |
+| M4 First contribution | ≥1 PR submitted and in review | Week 14 | 🔜 |
+| M5 Perf contribution | ≥2 PRs in review, ≥1 merged, at least one perf optimization with benchmark | Week 16 | ⏳ |
+| M6 Specialization | Subsystem regular contributor / mature Epic sub-task / DuckDB C++ | Week 17+ | ⏳ |
 
 ---
 
-## Phase 0 — 环境与地图（第 1–2 周）
+## Phase 0 — Environment & Map (Week 1–2)
 
-**状态**：✅ 已完成
+**Status**: ✅ Complete
 
-- [x] Day 1: GitHub 开 public repo `mini-vec-engine`
-- [x] clone `apache/datafusion`，`cargo build`，用 `datafusion-cli` 跑 SQL
-- [x] 画"SQL → LogicalPlan → 优化 → PhysicalPlan → 执行"数据流图
-- [x] 打断点跟踪 RecordBatch 从 TableScan → FilterExec → AggregateExec 的流动
-- [x] 完成 Arrow 内存布局自检
-- [x] 完善 `DESIGN.md` API 契约文档
+- [x] Day 1: Create public repo `mini-vec-engine`
+- [x] Clone `apache/datafusion`, `cargo build`, run SQL with `datafusion-cli`
+- [x] Draw "SQL → LogicalPlan → Optimize → PhysicalPlan → Execute" dataflow diagram
+- [x] Trace RecordBatch from TableScan → FilterExec → AggregateExec
+- [x] Complete Arrow memory layout self-check
+- [x] Finalize `DESIGN.md` API contract document
 
-**产出物**：
-1. 笔记《DataFusion 一条查询的生命周期》+ 数据流图
-2. `DESIGN.md` API 契约文档
-3. `mini-vec-engine` public repo 已上线
-
----
-
-## Phase 1 — 读懂"内核层"源码（第 3–6 周）
-
-**状态**：⏳ 未开始
+**Deliverables**:
+1. Notes: "The Lifecycle of a DataFusion Query" + dataflow diagram
+2. `DESIGN.md` API contract document
+3. `mini-vec-engine` public repo live
 
 ---
 
-## Phase 2 — 造迷你向量化引擎（第 7–11 周）
+## Phase 1 — Read the Kernel Layer Source (Week 3–6)
 
-**状态**：✅ 已完成
+**Status**: ✅ Complete
 
-- [x] 复制 HFT 基础设施到 `src/bench_infra/`
-- [x] 向量化扫描 + 谓词求值（selection bitmap）
-- [x] 向量化 filter（按 bitmap 压缩存活行）
-- [x] 并行 hash aggregate（rayon 分 partition + 原子合并）
-- [x] 金标准测试（naive 逐行 + 随机数据 differential testing）
-- [x] benchmark（naive vs 向量化 vs 并行）
-- [x] Late Materialization（先处理 filter 列，再按 bitmap 晚解码其他列）
-- [x] 两阶段并行聚合（线程本地哈希表 + 两阶段合并）
+- [x] Read arrow-rs `filter` kernel and `take` kernel
+- [x] Read `FilterExec` and `GroupedHashAggregateStream`
+- [x] Read `downcast_primitive_array!` and related macros
+- [x] Document comparison: `docs/datafusion_comparison.md`
 
-**实现清单**：
+**Deliverables**:
+1. `docs/datafusion_comparison.md` — detailed technique mapping between mini-vec-engine and DataFusion
+
+---
+
+## Phase 2 — Build a Toy Vectorized Engine (Week 7–11)
+
+**Status**: ✅ Complete
+
+- [x] Copy HFT infrastructure to `src/bench_infra/`
+- [x] Vectorized scan + predicate evaluation (selection bitmap)
+- [x] Vectorized filter (compress live rows by bitmap)
+- [x] Parallel hash aggregate (rayon partition + two-phase merge)
+- [x] Gold standard test (naive row-by-row + random data differential testing)
+- [x] Benchmark (naive vs vectorized vs parallel)
+- [x] Late Materialization (process filter column first, late-decode other columns by bitmap)
+- [x] Two-phase parallel aggregation (thread-local hash tables + two-phase merge)
+- [x] Per-stage latency histograms (p50/p99/p999 via TSC + HdrHistogram)
+- [x] Core count scaling benchmark (1/2/4/8 threads)
+- [x] Key cardinality sweep benchmark
+- [x] Perf stat script for branch-miss/cache-miss
+
+**Implementation inventory**:
 - `src/engine/mod.rs` — RecordBatch, AggResult, QueryParams, SelectionBitmap
-- `src/engine/data_gen.rs` — 随机数据生成（可配置行数、基数、值域、种子）
-- `src/engine/naive.rs` — 逐行参考实现
+- `src/engine/data_gen.rs` — Random data generation (configurable rows, cardinality, value range, seed)
+- `src/engine/naive.rs` — Row-by-row reference implementation
 - `src/engine/aggregate.rs` — evaluate_predicate, aggregate_selected, merge_maps
-- `src/engine/vectorized.rs` — early/late materialization 两种变体
-- `src/engine/parallel.rs` — rayon fold + 线程本地哈希表 + 两阶段合并
-- `src/bitmap.rs` — Bitmap<W> 多字位图（修复了 iter_set_bits 零字 bug）
-- `benches/engine_bench.rs` — criterion 吞吐 + 选择率扫描
-- `tests/differential_test.rs` — 8 组差分测试（不同数据形状）
+- `src/engine/vectorized.rs` — Early/late materialization variants
+- `src/engine/parallel.rs` — Rayon fold + thread-local hash tables + two-phase merge
+- `src/engine/instrumented.rs` — Per-stage TSC latency measurement + histogram reporting
+- `src/bitmap.rs` — `Bitmap<W>` multi-word bitmap (fixed iter_set_bits zero-word bug)
+- `benches/engine_bench.rs` — Criterion throughput + selectivity sweep + scaling + cardinality
+- `tests/differential_test.rs` — 8 differential tests (various data shapes)
 - `.github/workflows/ci.yml` — fmt + clippy + test + bench compile
+- `scripts/bench-perf.sh` — Linux perf stat for branch-miss/cache-miss
+- `docs/datafusion_comparison.md` — Phase 1 technique mapping deliverable
 
 ---
 
-## Phase 3 — 首次开源贡献（第 12–16 周）
+## Phase 3 — First Open-Source Contribution (Week 12–16)
 
-**状态**：⏳ 未开始
+**Status**: 🔜 Starting
+
+Target: ≥2 PRs submitted and in review, ≥1 merged, at least one performance optimization with benchmark.
+
+**Candidate issues** (identified by fit with our expertise):
+1. apache/datafusion#19241 — IN list bitmap filters (bitmap ops, cache-line alignment)
+2. apache/datafusion#15631 — Early exit binary_expr bit ops (bitmap manipulation)
+3. apache/datafusion#1823 — bitmap_distinct aggregate (bitmap operations)
+4. apache/datafusion#20773 — Cache-efficient partial aggregation (hash agg, parallelism)
+5. apache/datafusion-comet#2986 — Optimize slow Comet expressions (good first issue, perf)
 
 ---
 
-## Phase 4 — 深入与扩展（第 17 周起）
+## Phase 4 — Deepen & Expand (Week 17+)
 
-**状态**：⏳ 未开始
+**Status**: ⏳ Not Started
