@@ -1,4 +1,164 @@
+use std::time::Instant;
+
+use mini_vec_engine::bench_infra::bench_env::EnvSnapshot;
+use mini_vec_engine::bench_infra::timer;
+use mini_vec_engine::engine::{self, data_gen, QueryParams};
+
 fn main() {
-    println!("mini-vec-engine: not yet implemented");
-    println!("See DESIGN.md for the planned scope.");
+    let total_rows = 10_000_000;
+    let threshold = 500i64;
+    let n_distinct_keys = 100u32;
+
+    println!("=== mini-vec-engine ===");
+    println!(
+        "Rows: {} | Threshold: {} | Distinct keys: {} | Batch size: {}\n",
+        total_rows,
+        threshold,
+        n_distinct_keys,
+        engine::BATCH_SIZE
+    );
+
+    // Calibrate TSC
+    let ghz = timer::calibrate_ghz();
+    println!("TSC calibrated: {:.3} GHz\n", ghz);
+
+    // Generate data
+    println!("Generating data...");
+    let config = data_gen::DataGenConfig {
+        total_rows,
+        n_distinct_keys,
+        val_min: 0,
+        val_max: 1000,
+        seed: 42,
+    };
+    let start = Instant::now();
+    let batches = data_gen::generate_batches(&config);
+    let gen_time = start.elapsed();
+    println!(
+        "Generated {} batches in {:.3}ms\n",
+        batches.len(),
+        gen_time.as_secs_f64() * 1000.0
+    );
+
+    let params = QueryParams { threshold };
+
+    // --- Naive ---
+    println!("--- Naive (row-by-row) ---");
+    let before = EnvSnapshot::take();
+    let start = Instant::now();
+    let naive_results = engine::naive::execute(&batches, &params);
+    let naive_time = start.elapsed();
+    let after = EnvSnapshot::take();
+    let clean = before.isolation_clean(&after);
+    println!(
+        "Time: {:.3}ms | Throughput: {:.0} rows/s | Clean env: {}",
+        naive_time.as_secs_f64() * 1000.0,
+        total_rows as f64 / naive_time.as_secs_f64(),
+        clean
+    );
+    println!("Groups: {}\n", naive_results.len());
+
+    // --- Vectorized Early Materialization ---
+    println!("--- Vectorized (early materialization) ---");
+    let before = EnvSnapshot::take();
+    let start = Instant::now();
+    let early_results = engine::vectorized::execute_early(&batches, &params);
+    let early_time = start.elapsed();
+    let after = EnvSnapshot::take();
+    let clean = before.isolation_clean(&after);
+    println!(
+        "Time: {:.3}ms | Throughput: {:.0} rows/s | Clean env: {}",
+        early_time.as_secs_f64() * 1000.0,
+        total_rows as f64 / early_time.as_secs_f64(),
+        clean
+    );
+    assert_eq!(
+        naive_results, early_results,
+        "Early materialization results mismatch!"
+    );
+    println!("Results match naive\n");
+
+    // --- Vectorized Late Materialization ---
+    println!("--- Vectorized (late materialization) ---");
+    let before = EnvSnapshot::take();
+    let start = Instant::now();
+    let late_results = engine::vectorized::execute_late(&batches, &params);
+    let late_time = start.elapsed();
+    let after = EnvSnapshot::take();
+    let clean = before.isolation_clean(&after);
+    println!(
+        "Time: {:.3}ms | Throughput: {:.0} rows/s | Clean env: {}",
+        late_time.as_secs_f64() * 1000.0,
+        total_rows as f64 / late_time.as_secs_f64(),
+        clean
+    );
+    assert_eq!(
+        naive_results, late_results,
+        "Late materialization results mismatch!"
+    );
+    let late_speedup = naive_time.as_secs_f64() / late_time.as_secs_f64();
+    println!(
+        "Results match naive | Late vs Naive: {:.2}x\n",
+        late_speedup
+    );
+
+    // --- Parallel ---
+    println!("--- Parallel (rayon + two-phase merge) ---");
+    let before = EnvSnapshot::take();
+    let start = Instant::now();
+    let parallel_results = engine::parallel::execute(&batches, &params);
+    let parallel_time = start.elapsed();
+    let after = EnvSnapshot::take();
+    let clean = before.isolation_clean(&after);
+    println!(
+        "Time: {:.3}ms | Throughput: {:.0} rows/s | Clean env: {}",
+        parallel_time.as_secs_f64() * 1000.0,
+        total_rows as f64 / parallel_time.as_secs_f64(),
+        clean
+    );
+    assert_eq!(
+        naive_results, parallel_results,
+        "Parallel results mismatch!"
+    );
+    let parallel_speedup = naive_time.as_secs_f64() / parallel_time.as_secs_f64();
+    println!(
+        "Results match naive | Parallel vs Naive: {:.2}x\n",
+        parallel_speedup
+    );
+
+    // --- Summary ---
+    println!("=== Summary ===");
+    println!("| Engine | Time (ms) | Throughput (rows/s) | Speedup |");
+    println!("|--------|-----------|---------------------|---------|");
+    println!(
+        "| Naive | {:.3} | {:.0} | 1.00x |",
+        naive_time.as_secs_f64() * 1000.0,
+        total_rows as f64 / naive_time.as_secs_f64()
+    );
+    println!(
+        "| Vec-Early | {:.3} | {:.0} | {:.2}x |",
+        early_time.as_secs_f64() * 1000.0,
+        total_rows as f64 / early_time.as_secs_f64(),
+        naive_time.as_secs_f64() / early_time.as_secs_f64()
+    );
+    println!(
+        "| Vec-Late | {:.3} | {:.0} | {:.2}x |",
+        late_time.as_secs_f64() * 1000.0,
+        total_rows as f64 / late_time.as_secs_f64(),
+        late_speedup
+    );
+    println!(
+        "| Parallel | {:.3} | {:.0} | {:.2}x |",
+        parallel_time.as_secs_f64() * 1000.0,
+        total_rows as f64 / parallel_time.as_secs_f64(),
+        parallel_speedup
+    );
+
+    println!("\nTop 10 groups:");
+    for r in naive_results.iter().take(10) {
+        println!("  key={} sum={}", r.key, r.sum);
+    }
+    if naive_results.len() > 10 {
+        println!("  ... ({} more)", naive_results.len() - 10);
+    }
 }

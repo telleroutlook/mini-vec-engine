@@ -1,29 +1,51 @@
-/// Vectorized query engine.
-///
-/// Implements the pipeline:
-///   RecordBatch → VectorizedScan → PredicateEval → LateMaterialize → HashAggregate → TwoPhaseMerge
-///
-/// All components are columnar and operate on fixed-size batches.
+//! Vectorized query engine.
+//!
+//! Implements the pipeline:
+//!   RecordBatch → PredicateEval → LateMaterialize → HashAggregate → TwoPhaseMerge
+//!
+//! Target query: `SELECT key, SUM(val) FROM t WHERE val > C GROUP BY key`
 
-/// Columnar batch of rows — the fundamental unit of data flow through the engine.
+use std::collections::HashMap;
+
+use crate::bitmap::Bitmap;
+
+pub const BATCH_SIZE: usize = 2048;
+pub const BATCH_WORDS: usize = BATCH_SIZE / 64;
+
+pub type SelectionBitmap = Bitmap<BATCH_WORDS>;
+
+/// Columnar batch — the fundamental unit of data flow through the engine.
 pub struct RecordBatch {
-    /// Column names (for display/debug only).
-    pub schema: Vec<String>,
-    /// Columnar data stored as `Vec<u64>` byte-reinterpreted columns.
-    /// Each column is a contiguous array of 64-bit values.
-    pub columns: Vec<Vec<u64>>,
-    /// Per-column validity bitmap (None = all valid).
-    pub validity: Vec<Option<Vec<bool>>>,
-    /// Number of rows in this batch.
+    pub keys: Vec<u32>,
+    pub vals: Vec<i64>,
     pub num_rows: usize,
 }
 
-/// Selection bitmap output from predicate evaluation.
-/// Indicates which rows from a batch survive the filter.
-pub type Selection = Vec<bool>;
-
 /// Aggregation result: (key, sum).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AggResult {
-    pub key: u64,
+    pub key: u32,
     pub sum: i64,
+}
+
+/// Query parameters for the hard-coded template:
+/// `SELECT key, SUM(val) FROM t WHERE val > threshold GROUP BY key`
+pub struct QueryParams {
+    pub threshold: i64,
+}
+
+pub mod aggregate;
+pub mod data_gen;
+pub mod naive;
+pub mod parallel;
+pub mod vectorized;
+
+/// Convert a HashMap into sorted AggResults for deterministic comparison.
+pub fn sorted_results(agg: HashMap<u32, i64>) -> Vec<AggResult> {
+    let mut results: Vec<AggResult> = agg
+        .into_iter()
+        .map(|(key, sum)| AggResult { key, sum })
+        .collect();
+    results.sort_by_key(|r| r.key);
+    results
 }

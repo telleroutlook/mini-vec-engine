@@ -7,10 +7,10 @@ description = "DataFusion-flavored toy vectorized query engine"
 [dependencies]
 rayon = "1.10"
 hdrhistogram = "7"
+rand = "0.9"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-rand = "0.9"
 
 [profile.release]
 lto = "fat"

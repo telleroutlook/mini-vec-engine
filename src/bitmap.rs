@@ -44,16 +44,24 @@ impl<const W: usize> Bitmap<W> {
         self.words.iter().map(|w| w.count_ones() as usize).sum()
     }
 
-    /// Iterate over all set bit positions.
+    /// Iterate over all set bit positions (ascending order).
     pub fn iter_set_bits(&self) -> impl Iterator<Item = usize> + '_ {
-        self.words.iter().enumerate().flat_map(|(word_idx, &word)| {
-            let base = word_idx * 64;
-            std::iter::successors(Some(word), move |&w| {
-                let next = w & (w - 1); // clear lowest set bit
-                if next == 0 { None } else { Some(next) }
+        self.words
+            .iter()
+            .enumerate()
+            .filter(|(_, &word)| word != 0)
+            .flat_map(|(word_idx, &word)| {
+                let base = word_idx * 64;
+                std::iter::successors(Some(word), move |&w| {
+                    let next = w & (w - 1); // clear lowest set bit
+                    if next == 0 {
+                        None
+                    } else {
+                        Some(next)
+                    }
+                })
+                .map(move |w| base + (w.trailing_zeros() as usize))
             })
-            .map(move |w| base + (w.trailing_zeros() as usize))
-        })
     }
 
     /// Bitwise AND — intersection of two selection bitmaps.

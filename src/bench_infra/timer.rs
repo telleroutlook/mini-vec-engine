@@ -52,9 +52,10 @@ pub fn cycles_to_ns(cycles: u64, ghz: f64) -> f64 {
 
 /// RAII guard that measures the elapsed cycles between construction and drop.
 /// Use in hot paths: `let _m = ScopeTimer::new(&ghz, &mut buf);`
+#[allow(dead_code)]
 pub struct ScopeTimer<'a> {
     start: u64,
-    ghz: f64,
+    ghz: f64, // kept for future cycle-to-ns conversion in drop
     buf: &'a mut super::latency_buf::LatencyBuffer,
 }
 

@@ -1,6 +1,6 @@
 # mini-vec-engine
 
-DataFusion-flavored toy vectorized engine, in active development.
+DataFusion-flavored toy vectorized query engine.
 
 ## What is this?
 
@@ -26,18 +26,37 @@ Input Columns ──→ Vectorized Scan ──→ Predicate Eval ──→ Selec
             Two-Phase Merge ──→ Result
 ```
 
+## Engine Variants
+
+| Engine | Description |
+|---|---|
+| **Naive** | Row-by-row reference implementation (gold standard) |
+| **Vectorized (early)** | Batch processing, materializes all columns before filtering |
+| **Vectorized (late)** | Evaluates predicate first, only decodes key for surviving rows |
+| **Parallel** | Thread-local hash tables via rayon + two-phase merge |
+
+## Quick Start
+
+```bash
+# Run the engine with default parameters (10M rows)
+cargo run --release
+
+# Run benchmarks
+cargo bench
+
+# Run differential tests (verify all engines produce identical results)
+cargo test
+```
+
+## Correctness
+
+All engine variants are verified against the naive row-by-row implementation via
+differential testing across multiple data shapes (varying selectivity, cardinality,
+batch alignment). See `tests/differential_test.rs`.
+
 ## Status
 
 See [docs/MILESTONES.md](docs/MILESTONES.md) for detailed progress tracking.
-
-## Benchmarking
-
-All benchmarks use cycle-accurate TSC timing with environment noise detection, carried over
-from the HFT latency lab project.
-
-```bash
-cargo bench
-```
 
 ## License
 
