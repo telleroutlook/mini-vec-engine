@@ -1,0 +1,37 @@
+[package]
+name = "mini-vec-engine"
+version = "0.1.0"
+edition = "2021"
+description = "DataFusion-flavored toy vectorized query engine"
+
+[dependencies]
+rayon = "1.10"
+hdrhistogram = "7"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.9"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+opt-level = 3
+debug = true
+overflow-checks = false
+
+[profile.bench]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+debug = true
+overflow-checks = false
+
+[[bench]]
+name = "engine_bench"
+harness = false
+
+[features]
+default = []
+stats = []
