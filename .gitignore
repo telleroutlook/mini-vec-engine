@@ -2,3 +2,6 @@
 *.swp
 *.swo
 *~
+
+# macOS Apple Double files
+._*
