@@ -3,6 +3,7 @@ name = "mini-vec-engine"
 version = "0.1.0"
 edition = "2021"
 description = "DataFusion-flavored toy vectorized query engine"
+license = "Apache-2.0"
 
 [dependencies]
 rayon = "1.10"
