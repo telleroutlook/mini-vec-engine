@@ -11,8 +11,8 @@
 | M1 Map built | Hand-drawn DataFusion query dataflow + Arrow memory layout + `DESIGN.md` + `mini-vec-engine` repo live | Week 2 | ✅ |
 | M2 Kernels read | Recite filter/aggregate kernels + CMU 15-721 core 4 chapters | Week 6 | ⏳ |
 | M3 Build wheels | `mini-vec-engine` published with late materialization + differential test + perf benchmark + tech blog | Week 11 | ✅ |
-| M4 First contribution | ≥1 PR submitted and in review | Week 14 | 🔜 |
-| M5 Perf contribution | ≥2 PRs in review, ≥1 merged, at least one perf optimization with benchmark | Week 16 | ⏳ |
+| M4 First contribution | ≥1 PR submitted and in review | Week 14 | ✅ PR #22579 |
+| M5 Perf contribution | ≥2 PRs in review, ≥1 merged, at least one perf optimization with benchmark | Week 16 | 🔜 PR #22580 |
 | M6 Specialization | Subsystem regular contributor / mature Epic sub-task / DuckDB C++ | Week 17+ | ⏳ |
 
 ---
@@ -85,16 +85,19 @@
 
 ## Phase 3 — First Open-Source Contribution (Week 12–16)
 
-**Status**: 🔜 Starting
+**Status**: 🔜 In Progress — 2 PRs submitted
 
 Target: ≥2 PRs submitted and in review, ≥1 merged, at least one performance optimization with benchmark.
 
-**Candidate issues** (identified by fit with our expertise):
+**Submitted PRs**:
+1. [PR #22579](https://github.com/apache/datafusion/pull/22579) — `ln()` raises error for non-positive input (PostgreSQL compat) — CI green, awaiting review
+2. [PR #22580](https://github.com/apache/datafusion/pull/22580) — Optimize `check_short_circuit` with early-exit bit scanning (targets #15631) — CI pending
+
+**Remaining candidate issues**:
 1. apache/datafusion#19241 — IN list bitmap filters (bitmap ops, cache-line alignment)
-2. apache/datafusion#15631 — Early exit binary_expr bit ops (bitmap manipulation)
-3. apache/datafusion#1823 — bitmap_distinct aggregate (bitmap operations)
-4. apache/datafusion#20773 — Cache-efficient partial aggregation (hash agg, parallelism)
-5. apache/datafusion-comet#2986 — Optimize slow Comet expressions (good first issue, perf)
+2. apache/datafusion#1823 — bitmap_distinct aggregate (bitmap operations)
+3. apache/datafusion#20773 — Cache-efficient partial aggregation (hash agg, parallelism)
+4. apache/datafusion-comet#2986 — Optimize slow Comet expressions (good first issue, perf)
 
 ---
 
