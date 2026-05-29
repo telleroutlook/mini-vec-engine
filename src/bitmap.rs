@@ -357,11 +357,21 @@ mod tests {
         bm.set(150);
         for n in [1, 5, 32, 63, 64, 65, 100] {
             let roundtrip = bm.shl(n).shr(n);
-            assert_eq!(roundtrip.popcount(), bm.popcount(), "Roundtrip popcount mismatch at n={}", n);
+            assert_eq!(
+                roundtrip.popcount(),
+                bm.popcount(),
+                "Roundtrip popcount mismatch at n={}",
+                n
+            );
             // All original bits that don't overflow should survive the roundtrip.
             for &bit in &[10, 50, 100, 150] {
                 if bit + n < 256 {
-                    assert!(roundtrip.get(bit), "Bit {} lost in roundtrip at n={}", bit, n);
+                    assert!(
+                        roundtrip.get(bit),
+                        "Bit {} lost in roundtrip at n={}",
+                        bit,
+                        n
+                    );
                 }
             }
         }

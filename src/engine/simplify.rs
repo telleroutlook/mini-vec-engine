@@ -37,12 +37,22 @@ pub fn simplify(expr: &Expr) -> Expr {
 
             // De Morgan: NOT(And([a,b,...])) -> Or([NOT(a), NOT(b), ...])
             if let Expr::And(children) = &s {
-                return Expr::Or(children.iter().map(|c| Expr::Not(Box::new(c.clone()))).collect());
+                return Expr::Or(
+                    children
+                        .iter()
+                        .map(|c| Expr::Not(Box::new(c.clone())))
+                        .collect(),
+                );
             }
 
             // De Morgan: NOT(Or([a,b,...])) -> And([NOT(a), NOT(b), ...])
             if let Expr::Or(children) = &s {
-                return Expr::And(children.iter().map(|c| Expr::Not(Box::new(c.clone()))).collect());
+                return Expr::And(
+                    children
+                        .iter()
+                        .map(|c| Expr::Not(Box::new(c.clone())))
+                        .collect(),
+                );
             }
 
             Expr::Not(Box::new(s))
@@ -279,10 +289,7 @@ mod tests {
     #[test]
     fn de_morgan_and() {
         // NOT(AND([a, b])) -> OR([NOT(a), NOT(b)])
-        let expr = Expr::Not(Box::new(Expr::And(vec![
-            Expr::Column(0),
-            Expr::Column(1),
-        ])));
+        let expr = Expr::Not(Box::new(Expr::And(vec![Expr::Column(0), Expr::Column(1)])));
         let result = simplify(&expr);
         assert_eq!(
             result,
@@ -296,10 +303,7 @@ mod tests {
     #[test]
     fn de_morgan_or() {
         // NOT(OR([a, b])) -> AND([NOT(a), NOT(b)])
-        let expr = Expr::Not(Box::new(Expr::Or(vec![
-            Expr::Column(0),
-            Expr::Column(1),
-        ])));
+        let expr = Expr::Not(Box::new(Expr::Or(vec![Expr::Column(0), Expr::Column(1)])));
         let result = simplify(&expr);
         assert_eq!(
             result,

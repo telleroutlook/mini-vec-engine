@@ -327,10 +327,7 @@ mod tests {
 
     #[test]
     fn from_batch_computes_min_max() {
-        let columns: Vec<Vec<i64>> = vec![
-            vec![10, 50, -5, 200, 30],
-            vec![0, -100, 50, 25, 75],
-        ];
+        let columns: Vec<Vec<i64>> = vec![vec![10, 50, -5, 200, 30], vec![0, -100, 50, 25, 75]];
         let stats = BatchStatistics::from_batch(&columns, 5);
         assert_eq!(stats.count, 5);
         assert_eq!(stats.min[0], -5);

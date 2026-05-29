@@ -347,7 +347,12 @@ pub fn expr_to_string(expr: &Expr) -> String {
                 BinOp::Mul => "*",
                 BinOp::Div => "/",
             };
-            format!("({} {} {})", expr_to_string(left), op_str, expr_to_string(right))
+            format!(
+                "({} {} {})",
+                expr_to_string(left),
+                op_str,
+                expr_to_string(right)
+            )
         }
         Expr::Not(inner) => format!("NOT ({})", expr_to_string(inner)),
         Expr::And(children) => {
@@ -421,7 +426,11 @@ mod tests {
                     BinOp::Sub => lv.wrapping_sub(rv) != 0,
                     BinOp::Mul => lv.wrapping_mul(rv) != 0,
                     BinOp::Div => {
-                        if rv == 0 { false } else { lv / rv != 0 }
+                        if rv == 0 {
+                            false
+                        } else {
+                            lv / rv != 0
+                        }
                     }
                 }
             }
@@ -446,7 +455,11 @@ mod tests {
                     BinOp::Sub => lv.wrapping_sub(rv),
                     BinOp::Mul => lv.wrapping_mul(rv),
                     BinOp::Div => {
-                        if rv == 0 { 0 } else { lv / rv }
+                        if rv == 0 {
+                            0
+                        } else {
+                            lv / rv
+                        }
                     }
                     // Comparison ops: return 1 for true, 0 for false.
                     BinOp::Eq => (lv == rv) as i64,
@@ -636,7 +649,7 @@ mod tests {
         assert!(!result.get(0));
         assert!(!result.get(1)); // 50 is not > 100
         assert!(!result.get(2));
-        assert!(result.get(3));  // 150 > 100, and row 3 was selected
+        assert!(result.get(3)); // 150 > 100, and row 3 was selected
         assert!(!result.get(4));
     }
 
@@ -783,7 +796,7 @@ mod tests {
         let not_expr = Expr::Not(Box::new(Expr::BinaryOp {
             op: BinOp::GtEq,
             left: Box::new(Expr::Column(2)),
-            right: Box::new(Expr::Literal(ScalarValue::F64(std::f64::consts::FRAC_PI_2)),),
+            right: Box::new(Expr::Literal(ScalarValue::F64(std::f64::consts::FRAC_PI_2))),
         }));
         assert_eq!(expr_to_string(&not_expr), "NOT ((col2 >= 1.570796))");
 
@@ -815,14 +828,16 @@ mod tests {
             x
         };
 
-        let next_i64 = |state: &mut u64| -> i64 {
-            next_u64(state) as i64
-        };
+        let next_i64 = |state: &mut u64| -> i64 { next_u64(state) as i64 };
 
         for trial in 0..20 {
             let n = 16 + (next_u64(&mut rng_state) as usize % 64);
-            let col0: Vec<i64> = (0..n).map(|_| next_i64(&mut rng_state) % 300 - 150).collect();
-            let col1: Vec<i64> = (0..n).map(|_| next_i64(&mut rng_state) % 300 - 150).collect();
+            let col0: Vec<i64> = (0..n)
+                .map(|_| next_i64(&mut rng_state) % 300 - 150)
+                .collect();
+            let col1: Vec<i64> = (0..n)
+                .map(|_| next_i64(&mut rng_state) % 300 - 150)
+                .collect();
             let columns = vec![col0, col1];
 
             let threshold0 = next_i64(&mut rng_state) % 300 - 150;

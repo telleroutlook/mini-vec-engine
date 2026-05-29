@@ -7,7 +7,7 @@
 //! Gate behind `#[cfg(feature = "profile")]` so all profiling overhead
 //! compiles away in normal builds.
 
-use core::arch::x86_64::{_rdtsc, _mm_lfence, __rdtscp};
+use core::arch::x86_64::{__rdtscp, _mm_lfence, _rdtsc};
 
 /// Raw timestamp counter read — no serialization guarantees.
 ///
@@ -112,10 +112,17 @@ impl QueryProfile {
              \x20 total     : {:>12} cycles | {:>10} ns |",
             self.operation_name,
             ghz,
-            self.predicate_cycles, pred_ns, pct(self.predicate_cycles),
-            self.aggregate_cycles, agg_ns, pct(self.aggregate_cycles),
-            self.partition_cycles, part_ns, pct(self.partition_cycles),
-            self.total_cycles, total_ns,
+            self.predicate_cycles,
+            pred_ns,
+            pct(self.predicate_cycles),
+            self.aggregate_cycles,
+            agg_ns,
+            pct(self.aggregate_cycles),
+            self.partition_cycles,
+            part_ns,
+            pct(self.partition_cycles),
+            self.total_cycles,
+            total_ns,
         )
     }
 }
@@ -155,7 +162,10 @@ mod tests {
     fn cycles_to_ns_roundtrip() {
         let ghz = 3.9;
         let ns = cycles_to_ns(3900, ghz);
-        assert_eq!(ns, 1000, "3900 cycles at 3.9 GHz should be 1000 ns, got {ns}");
+        assert_eq!(
+            ns, 1000,
+            "3900 cycles at 3.9 GHz should be 1000 ns, got {ns}"
+        );
     }
 
     #[test]
@@ -167,7 +177,10 @@ mod tests {
         p.total_cycles = 3500;
 
         let s = p.summary(3.9);
-        assert!(s.contains("test_op"), "summary should contain operation name");
+        assert!(
+            s.contains("test_op"),
+            "summary should contain operation name"
+        );
         assert!(s.contains("predicate"), "summary should contain predicate");
         assert!(s.contains("aggregate"), "summary should contain aggregate");
         assert!(s.contains("partition"), "summary should contain partition");

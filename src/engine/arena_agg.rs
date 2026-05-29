@@ -57,7 +57,10 @@ impl ArenaHashTable {
     /// then linear probing for collision resolution.
     #[inline]
     pub fn insert_or_add(&mut self, key: u32, value: i64) {
-        debug_assert!(key != EMPTY_KEY, "EMPTY_KEY cannot be used as aggregation key");
+        debug_assert!(
+            key != EMPTY_KEY,
+            "EMPTY_KEY cannot be used as aggregation key"
+        );
 
         let mut idx = Self::hash_key(key) & self.mask;
         loop {
