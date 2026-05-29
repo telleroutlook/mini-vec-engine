@@ -392,8 +392,8 @@ mod tests {
     /// Naive evaluation: evaluate expr row-by-row, returning Vec<bool>.
     fn naive_eval(expr: &Expr, columns: &[Vec<i64>], n: usize) -> Vec<bool> {
         let mut result = vec![false; n];
-        for row in 0..n {
-            result[row] = eval_row(expr, columns, row);
+        for (row, slot) in result.iter_mut().enumerate().take(n) {
+            *slot = eval_row(expr, columns, row);
         }
         result
     }
@@ -783,9 +783,9 @@ mod tests {
         let not_expr = Expr::Not(Box::new(Expr::BinaryOp {
             op: BinOp::GtEq,
             left: Box::new(Expr::Column(2)),
-            right: Box::new(Expr::Literal(ScalarValue::F64(3.14))),
+            right: Box::new(Expr::Literal(ScalarValue::F64(std::f64::consts::FRAC_PI_2)),),
         }));
-        assert_eq!(expr_to_string(&not_expr), "NOT ((col2 >= 3.140000))");
+        assert_eq!(expr_to_string(&not_expr), "NOT ((col2 >= 1.570796))");
 
         let bool_lit = Expr::Literal(ScalarValue::Bool(true));
         assert_eq!(expr_to_string(&bool_lit), "true");

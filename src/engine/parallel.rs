@@ -265,12 +265,10 @@ pub fn execute_partitioned(batches: &[RecordBatch], params: &QueryParams) -> Vec
             let k = unsafe { *batch.keys.get_unchecked(row_idx) };
 
             // Assign to the partition containing key k
-            let part_idx = if keys_per_partition > 0 {
-                let offset = (k as usize).saturating_sub(key_min as usize);
-                std::cmp::min(offset / keys_per_partition, n_partitions - 1)
-            } else {
-                0
-            };
+            let offset = (k as usize).saturating_sub(key_min as usize);
+            let part_idx = offset
+                .checked_div(keys_per_partition)
+                .map_or(0, |q| std::cmp::min(q, n_partitions - 1));
             // Store (batch_index, row_index, value) — we repack to avoid
             // re-reading the value during aggregation. Actually, just store
             // (batch_index, row_index); the worker will read key + val.
@@ -514,11 +512,9 @@ pub fn adaptive_execute_partitioned(
             }
             let k = unsafe { *batch.keys.get_unchecked(row_idx) };
             let offset = (k as usize).saturating_sub(key_min as usize);
-            let bucket_idx = if keys_per_bucket > 0 {
-                std::cmp::min(offset / keys_per_bucket, n_buckets - 1)
-            } else {
-                0
-            };
+            let bucket_idx = offset
+                .checked_div(keys_per_bucket)
+                .map_or(0, |q| std::cmp::min(q, n_buckets - 1));
             buckets[bucket_idx].row_count += 1;
         }
     }

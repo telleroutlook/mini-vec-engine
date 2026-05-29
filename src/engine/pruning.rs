@@ -36,8 +36,7 @@ impl BatchStatistics {
         for col_idx in 0..num_cols {
             let col = &columns[col_idx];
             let len = col.len().min(num_rows);
-            for row in 0..len {
-                let v = col[row];
+            for &v in col.iter().take(len) {
                 if v < min[col_idx] {
                     min[col_idx] = v;
                 }

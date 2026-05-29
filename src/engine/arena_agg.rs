@@ -37,7 +37,7 @@ impl ArenaHashTable {
         // Size the internal table to keep load factor <= 0.75.
         // Round up to next power of two, then ensure we have at least
         // 4/3 * requested_capacity slots.
-        let min_slots = (requested_capacity * 4 + 2) / 3; // ceil(4/3 * cap)
+        let min_slots = (requested_capacity * 4).div_ceil(3);
         let capacity = min_slots.next_power_of_two();
         let mask = capacity - 1;
 
@@ -218,9 +218,9 @@ mod tests {
         t.insert_or_add(1, 2);
         t.insert_or_add(2, 3);
         assert_eq!(t.len(), 3);
-        assert_eq!(t.iter().filter(|&(k, _)| k == 0).next(), Some((0, 1)));
-        assert_eq!(t.iter().filter(|&(k, _)| k == 1).next(), Some((1, 2)));
-        assert_eq!(t.iter().filter(|&(k, _)| k == 2).next(), Some((2, 3)));
+        assert_eq!(t.iter().find(|&(k, _)| k == 0), Some((0, 1)));
+        assert_eq!(t.iter().find(|&(k, _)| k == 1), Some((1, 2)));
+        assert_eq!(t.iter().find(|&(k, _)| k == 2), Some((2, 3)));
     }
 
     #[test]
@@ -232,8 +232,8 @@ mod tests {
         let keys: Vec<u32> = (0..512).map(|i| i % 100).collect();
         let vals: Vec<i64> = (0..512).map(|i| (i * 7) as i64).collect();
         let mut sel = Bitmap::<{ super::super::BATCH_WORDS }>::zeroed();
-        for i in 0..512 {
-            if vals[i] > 100 {
+        for (i, v) in vals.iter().enumerate().take(512) {
+            if *v > 100 {
                 sel.set(i);
             }
         }
