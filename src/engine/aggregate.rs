@@ -31,6 +31,20 @@ pub fn aggregate_selected(
     }
 }
 
+/// Profiled wrapper: time `aggregate_selected` and return elapsed cycles.
+#[cfg(feature = "profile")]
+pub fn aggregate_selected_timed(
+    keys: &[u32],
+    vals: &[i64],
+    selection: &SelectionBitmap,
+    num_rows: usize,
+    agg: &mut HashMap<u32, i64>,
+) -> u64 {
+    let t = crate::timing::OperationTimer::new();
+    aggregate_selected(keys, vals, selection, num_rows, agg);
+    t.elapsed()
+}
+
 /// Two-phase merge: combine thread-local hash maps into a global result.
 pub fn merge_maps(maps: &[HashMap<u32, i64>]) -> HashMap<u32, i64> {
     let mut global = HashMap::new();

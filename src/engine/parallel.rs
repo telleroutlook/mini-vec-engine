@@ -314,6 +314,119 @@ pub fn execute_partitioned(batches: &[RecordBatch], params: &QueryParams) -> Vec
     sorted_results(global)
 }
 
+/// Profiled wrapper: time each phase of `execute_partitioned` and return a QueryProfile.
+#[cfg(feature = "profile")]
+pub fn execute_partitioned_profiled(
+    batches: &[RecordBatch],
+    params: &QueryParams,
+) -> (Vec<AggResult>, crate::timing::QueryProfile) {
+    use crate::timing::{OperationTimer, QueryProfile};
+    let total = OperationTimer::new();
+
+    // ---- Phase 1: discover key range + predicate ----
+    let pred_timer = OperationTimer::new();
+    let mut key_min = u32::MAX;
+    let mut key_max = 0u32;
+    let mut total_qualifying = 0usize;
+
+    let selections: Vec<Bitmap<{ super::BATCH_WORDS }>> = batches
+        .iter()
+        .map(|b| evaluate_predicate(&b.vals, params.threshold))
+        .collect();
+
+    for (bi, batch) in batches.iter().enumerate() {
+        for row_idx in selections[bi].iter_set_bits() {
+            if row_idx >= batch.num_rows {
+                break;
+            }
+            let k = unsafe { *batch.keys.get_unchecked(row_idx) };
+            key_min = key_min.min(k);
+            key_max = key_max.max(k);
+            total_qualifying += 1;
+        }
+    }
+    let predicate_cycles = pred_timer.elapsed();
+
+    if total_qualifying == 0 {
+        let mut profile = QueryProfile::new("execute_partitioned");
+        profile.predicate_cycles = predicate_cycles;
+        profile.total_cycles = total.elapsed();
+        return (Vec::new(), profile);
+    }
+
+    // ---- Phase 2: generate key-range stubs ----
+    let part_timer = OperationTimer::new();
+    let n_threads = rayon::current_num_threads();
+    let n_distinct_keys = (key_max - key_min + 1) as usize;
+    let n_partitions = std::cmp::min(n_threads * 4, n_distinct_keys).max(1);
+    let keys_per_partition = n_distinct_keys / n_partitions;
+
+    let mut partitions: Vec<KeyPartition> = Vec::with_capacity(n_partitions);
+    for i in 0..n_partitions {
+        let lo = key_min + (i as u32) * (keys_per_partition as u32);
+        let hi = if i == n_partitions - 1 {
+            key_max + 1
+        } else {
+            key_min + ((i + 1) as u32) * (keys_per_partition as u32)
+        };
+        partitions.push(KeyPartition {
+            lo,
+            hi,
+            rows: Vec::new(),
+        });
+    }
+
+    for (bi, batch) in batches.iter().enumerate() {
+        for row_idx in selections[bi].iter_set_bits() {
+            if row_idx >= batch.num_rows {
+                break;
+            }
+            let k = unsafe { *batch.keys.get_unchecked(row_idx) };
+            let part_idx = if keys_per_partition > 0 {
+                let offset = (k as usize).saturating_sub(key_min as usize);
+                std::cmp::min(offset / keys_per_partition, n_partitions - 1)
+            } else {
+                0
+            };
+            partitions[part_idx].rows.push((bi, row_idx));
+        }
+    }
+    let partition_cycles = part_timer.elapsed();
+
+    // ---- Phase 3: parallel aggregation ----
+    let agg_timer = OperationTimer::new();
+    let results: Vec<HashMap<u32, i64>> = partitions
+        .into_par_iter()
+        .map(|part| {
+            let mut local = HashMap::new();
+            local.reserve((part.rows.len() * 2).max(16));
+            for (bi, row_idx) in part.rows {
+                let batch = &batches[bi];
+                let k = unsafe { *batch.keys.get_unchecked(row_idx) };
+                let v = unsafe { *batch.vals.get_unchecked(row_idx) };
+                *local.entry(k).or_insert(0) += v;
+            }
+            local
+        })
+        .collect();
+
+    let mut global = HashMap::new();
+    let total_entries: usize = results.iter().map(|m| m.len()).sum();
+    global.reserve(total_entries);
+    for local in results {
+        global.extend(local);
+    }
+    let aggregate_cycles = agg_timer.elapsed();
+
+    let mut profile = QueryProfile::new("execute_partitioned");
+    profile.predicate_cycles = predicate_cycles;
+    profile.partition_cycles = partition_cycles;
+    profile.aggregate_cycles = aggregate_cycles;
+    profile.total_cycles = total.elapsed();
+
+    (sorted_results(global), profile)
+}
+
 // ---------------------------------------------------------------------------
 // Adaptive partitioned execution
 // ---------------------------------------------------------------------------

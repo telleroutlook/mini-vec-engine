@@ -94,6 +94,10 @@ impl<const W: usize> Bitmap<W> {
     pub fn as_words(&self) -> &[u64; W] {
         &self.words
     }
+
+    pub fn as_raw_words_mut(&mut self) -> &mut [u64; W] {
+        &mut self.words
+    }
 }
 
 #[cfg(test)]

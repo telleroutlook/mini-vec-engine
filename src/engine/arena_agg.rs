@@ -134,6 +134,20 @@ pub fn aggregate_selected_arena(
     }
 }
 
+/// Profiled wrapper: time `aggregate_selected_arena` and return elapsed cycles.
+#[cfg(feature = "profile")]
+pub fn aggregate_selected_arena_timed(
+    keys: &[u32],
+    vals: &[i64],
+    selection: &crate::bitmap::Bitmap<{ super::BATCH_WORDS }>,
+    num_rows: usize,
+    agg: &mut ArenaHashTable,
+) -> u64 {
+    let t = crate::timing::OperationTimer::new();
+    aggregate_selected_arena(keys, vals, selection, num_rows, agg);
+    t.elapsed()
+}
+
 /// Merge multiple arena hash tables into a single `HashMap` for final output.
 ///
 /// Since the arena tables don't implement `IntoIterator` for `HashMap`

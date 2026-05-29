@@ -2,3 +2,6 @@ pub mod bench_infra;
 pub mod bitmap;
 pub mod engine;
 pub mod spsc;
+
+#[cfg(feature = "profile")]
+pub mod timing;

@@ -35,4 +35,5 @@ harness = false
 
 [features]
 default = []
+profile = []
 stats = []
