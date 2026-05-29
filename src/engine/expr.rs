@@ -75,6 +75,16 @@ pub fn evaluate_expr(
     selection: &Bitmap<BATCH_WORDS>,
     num_rows: usize,
 ) -> Bitmap<BATCH_WORDS> {
+    let simplified = super::simplify::simplify(expr);
+    evaluate_expr_impl(&simplified, columns, selection, num_rows)
+}
+
+fn evaluate_expr_impl(
+    expr: &Expr,
+    columns: &[Vec<i64>],
+    selection: &Bitmap<BATCH_WORDS>,
+    num_rows: usize,
+) -> Bitmap<BATCH_WORDS> {
     match expr {
         Expr::Column(idx) => {
             let col = &columns[*idx];
@@ -124,14 +134,14 @@ pub fn evaluate_expr(
             }
 
             // General case: evaluate both sides to bitmaps, then combine.
-            let lb = evaluate_expr(left, columns, selection, num_rows);
-            let rb = evaluate_expr(right, columns, selection, num_rows);
+            let lb = evaluate_expr_impl(left, columns, selection, num_rows);
+            let rb = evaluate_expr_impl(right, columns, selection, num_rows);
             // For comparison ops, zip through both bitmaps.
             eval_binop_bitmaps(op, &lb, &rb)
         }
 
         Expr::Not(inner) => {
-            let inner_result = evaluate_expr(inner, columns, selection, num_rows);
+            let inner_result = evaluate_expr_impl(inner, columns, selection, num_rows);
             // NOT only within the valid selection mask.
             selection.and(&inner_result.not())
         }
@@ -141,9 +151,9 @@ pub fn evaluate_expr(
                 // Vacuously true: all selected rows pass.
                 return selection.clone();
             }
-            let mut result = evaluate_expr(&children[0], columns, selection, num_rows);
+            let mut result = evaluate_expr_impl(&children[0], columns, selection, num_rows);
             for child in &children[1..] {
-                let child_result = evaluate_expr(child, columns, selection, num_rows);
+                let child_result = evaluate_expr_impl(child, columns, selection, num_rows);
                 result = result.and(&child_result);
             }
             result
@@ -153,9 +163,9 @@ pub fn evaluate_expr(
             if children.is_empty() {
                 return Bitmap::zeroed();
             }
-            let mut result = evaluate_expr(&children[0], columns, selection, num_rows);
+            let mut result = evaluate_expr_impl(&children[0], columns, selection, num_rows);
             for child in &children[1..] {
-                let child_result = evaluate_expr(child, columns, selection, num_rows);
+                let child_result = evaluate_expr_impl(child, columns, selection, num_rows);
                 result = result.or(&child_result);
             }
             result

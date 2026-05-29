@@ -41,6 +41,8 @@ pub mod expr;
 pub mod instrumented;
 pub mod naive;
 pub mod parallel;
+pub mod pruning;
+pub mod simplify;
 pub mod vectorized;
 
 /// Convert a HashMap into sorted AggResults for deterministic comparison.
