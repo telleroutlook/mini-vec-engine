@@ -5,9 +5,21 @@ use std::thread;
 use rayon::prelude::*;
 
 use super::aggregate::{aggregate_selected, evaluate_predicate, merge_maps};
+use super::expr::{BinOp, Expr, ScalarValue};
+use super::pruning::BatchStatistics;
 use super::{sorted_results, AggResult, QueryParams, RecordBatch};
 use crate::bitmap::Bitmap;
 use crate::spsc::SpscRing;
+
+/// Build the threshold predicate as an Expr tree for pruning.
+/// Represents `Column(0) > threshold` matching what `evaluate_predicate` does.
+fn threshold_expr(threshold: i64) -> Expr {
+    Expr::BinaryOp {
+        op: BinOp::Gt,
+        left: Box::new(Expr::Column(0)),
+        right: Box::new(Expr::Literal(ScalarValue::I64(threshold))),
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Adaptive segment sizing (borrowed from BlazingGoldbach adaptive_segment_size)
@@ -203,19 +215,35 @@ struct KeyPartition {
 ///   4. Rayon parallel iterator over partitions — each builds a local HashMap.
 ///   5. Collect results (no merge needed; key ranges are disjoint).
 pub fn execute_partitioned(batches: &[RecordBatch], params: &QueryParams) -> Vec<AggResult> {
-    // ---- Phase 1: discover key range ----
+    // ---- Phase 1: discover key range (with batch pruning) ----
     let mut key_min = u32::MAX;
     let mut key_max = 0u32;
     let mut total_qualifying = 0usize;
 
-    // Pre-compute selection bitmaps and count qualifying rows per batch
-    let selections: Vec<Bitmap<{ super::BATCH_WORDS }>> = batches
+    let predicate = threshold_expr(params.threshold);
+
+    // Pre-compute selection bitmaps, skipping prunable batches.
+    // BatchStatistics::from_batch is O(num_rows * num_cols), which is cheaper
+    // than the full predicate scan when the batch is pruned.
+    let selections: Vec<Option<Bitmap<{ super::BATCH_WORDS }>>> = batches
         .iter()
-        .map(|b| evaluate_predicate(&b.vals, params.threshold))
+        .map(|b| {
+            let columns = std::slice::from_ref(&b.vals);
+            let stats = BatchStatistics::from_batch(columns, b.num_rows);
+            if BatchStatistics::can_prune(&predicate, &stats) {
+                None
+            } else {
+                Some(evaluate_predicate(&b.vals, params.threshold))
+            }
+        })
         .collect();
 
     for (bi, batch) in batches.iter().enumerate() {
-        for row_idx in selections[bi].iter_set_bits() {
+        let sel = match &selections[bi] {
+            Some(s) => s,
+            None => continue,
+        };
+        for row_idx in sel.iter_set_bits() {
             if row_idx >= batch.num_rows {
                 break;
             }
@@ -258,7 +286,11 @@ pub fn execute_partitioned(batches: &[RecordBatch], params: &QueryParams) -> Vec
 
     // ---- Phase 3: assign qualifying rows to partitions ----
     for (bi, batch) in batches.iter().enumerate() {
-        for row_idx in selections[bi].iter_set_bits() {
+        let sel = match &selections[bi] {
+            Some(s) => s,
+            None => continue,
+        };
+        for row_idx in sel.iter_set_bits() {
             if row_idx >= batch.num_rows {
                 break;
             }
@@ -321,19 +353,33 @@ pub fn execute_partitioned_profiled(
     use crate::timing::{OperationTimer, QueryProfile};
     let total = OperationTimer::new();
 
-    // ---- Phase 1: discover key range + predicate ----
+    // ---- Phase 1: discover key range + predicate (with batch pruning) ----
     let pred_timer = OperationTimer::new();
     let mut key_min = u32::MAX;
     let mut key_max = 0u32;
     let mut total_qualifying = 0usize;
 
-    let selections: Vec<Bitmap<{ super::BATCH_WORDS }>> = batches
+    let predicate = threshold_expr(params.threshold);
+
+    let selections: Vec<Option<Bitmap<{ super::BATCH_WORDS }>>> = batches
         .iter()
-        .map(|b| evaluate_predicate(&b.vals, params.threshold))
+        .map(|b| {
+            let columns = std::slice::from_ref(&b.vals);
+            let stats = BatchStatistics::from_batch(columns, b.num_rows);
+            if BatchStatistics::can_prune(&predicate, &stats) {
+                None
+            } else {
+                Some(evaluate_predicate(&b.vals, params.threshold))
+            }
+        })
         .collect();
 
     for (bi, batch) in batches.iter().enumerate() {
-        for row_idx in selections[bi].iter_set_bits() {
+        let sel = match &selections[bi] {
+            Some(s) => s,
+            None => continue,
+        };
+        for row_idx in sel.iter_set_bits() {
             if row_idx >= batch.num_rows {
                 break;
             }
@@ -375,7 +421,11 @@ pub fn execute_partitioned_profiled(
     }
 
     for (bi, batch) in batches.iter().enumerate() {
-        for row_idx in selections[bi].iter_set_bits() {
+        let sel = match &selections[bi] {
+            Some(s) => s,
+            None => continue,
+        };
+        for row_idx in sel.iter_set_bits() {
             if row_idx >= batch.num_rows {
                 break;
             }
@@ -453,10 +503,20 @@ pub fn adaptive_execute_partitioned(
     batches: &[RecordBatch],
     params: &QueryParams,
 ) -> Vec<AggResult> {
-    // ---- Phase 1: pre-compute selection bitmaps ----
-    let selections: Vec<Bitmap<{ super::BATCH_WORDS }>> = batches
+    // ---- Phase 1: pre-compute selection bitmaps (with batch pruning) ----
+    let predicate = threshold_expr(params.threshold);
+
+    let selections: Vec<Option<Bitmap<{ super::BATCH_WORDS }>>> = batches
         .iter()
-        .map(|b| evaluate_predicate(&b.vals, params.threshold))
+        .map(|b| {
+            let columns = std::slice::from_ref(&b.vals);
+            let stats = BatchStatistics::from_batch(columns, b.num_rows);
+            if BatchStatistics::can_prune(&predicate, &stats) {
+                None
+            } else {
+                Some(evaluate_predicate(&b.vals, params.threshold))
+            }
+        })
         .collect();
 
     // ---- Phase 2: discover key range + build density histogram ----
@@ -465,7 +525,11 @@ pub fn adaptive_execute_partitioned(
     let mut total_qualifying = 0usize;
 
     for (bi, batch) in batches.iter().enumerate() {
-        for row_idx in selections[bi].iter_set_bits() {
+        let sel = match &selections[bi] {
+            Some(s) => s,
+            None => continue,
+        };
+        for row_idx in sel.iter_set_bits() {
             if row_idx >= batch.num_rows {
                 break;
             }
@@ -506,7 +570,11 @@ pub fn adaptive_execute_partitioned(
 
     // Count qualifying rows per bucket.
     for (bi, batch) in batches.iter().enumerate() {
-        for row_idx in selections[bi].iter_set_bits() {
+        let sel = match &selections[bi] {
+            Some(s) => s,
+            None => continue,
+        };
+        for row_idx in sel.iter_set_bits() {
             if row_idx >= batch.num_rows {
                 break;
             }
@@ -563,7 +631,11 @@ pub fn adaptive_execute_partitioned(
     let partition_borders: Vec<u32> = partitions.iter().map(|p| p.hi).collect();
 
     for (bi, batch) in batches.iter().enumerate() {
-        for row_idx in selections[bi].iter_set_bits() {
+        let sel = match &selections[bi] {
+            Some(s) => s,
+            None => continue,
+        };
+        for row_idx in sel.iter_set_bits() {
             if row_idx >= batch.num_rows {
                 break;
             }

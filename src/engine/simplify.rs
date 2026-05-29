@@ -90,6 +90,25 @@ pub fn simplify(expr: &Expr) -> Expr {
             }
         }
 
+        Expr::In(col_idx, values) => {
+            if values.is_empty() {
+                return Expr::Literal(ScalarValue::Bool(false));
+            }
+            // Deduplicate
+            let mut unique: Vec<i64> = values.clone();
+            unique.sort_unstable();
+            unique.dedup();
+            if unique.len() == 1 {
+                // IN (x) -> col == x
+                return Expr::BinaryOp {
+                    op: BinOp::Eq,
+                    left: Box::new(Expr::Column(*col_idx)),
+                    right: Box::new(Expr::Literal(ScalarValue::I64(unique[0]))),
+                };
+            }
+            Expr::In(*col_idx, unique)
+        }
+
         Expr::Or(children) => {
             let simplified: Vec<Expr> = children
                 .iter()

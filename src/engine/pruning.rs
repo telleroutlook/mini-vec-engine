@@ -97,6 +97,16 @@ impl BatchStatistics {
                 }
                 children.iter().all(|c| Self::can_prune(c, stats))
             }
+
+            Expr::In(col_idx, values) => {
+                if col_idx >= &stats.min.len() || values.is_empty() {
+                    return col_idx >= &stats.min.len();
+                }
+                let col_min = stats.min[*col_idx];
+                let col_max = stats.max[*col_idx];
+                // If every value falls outside [col_min, col_max], no match possible.
+                values.iter().all(|&v| v < col_min || v > col_max)
+            }
         }
     }
 }

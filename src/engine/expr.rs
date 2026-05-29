@@ -7,7 +7,7 @@
 
 use crate::bitmap::Bitmap;
 
-use super::BATCH_WORDS;
+use super::{bloom::BloomFilter, BATCH_WORDS};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -58,6 +58,10 @@ pub enum Expr {
     /// Disjunction (OR) of zero or more children.
     /// Empty vec is treated as all-zeros (vacuously false).
     Or(Vec<Expr>),
+    /// Set membership: `In(column_index, values)`.
+    /// True when `columns[column_index][row]` is in `values`.
+    /// Uses a bloom filter internally for fast rejection when the list is large.
+    In(usize, Vec<i64>),
 }
 
 // ---------------------------------------------------------------------------
@@ -167,6 +171,46 @@ fn evaluate_expr_impl(
             for child in &children[1..] {
                 let child_result = evaluate_expr_impl(child, columns, selection, num_rows);
                 result = result.or(&child_result);
+            }
+            result
+        }
+
+        Expr::In(col_idx, values) => {
+            let col = &columns[*col_idx];
+            if values.is_empty() {
+                return Bitmap::zeroed();
+            }
+            // Small list: linear scan (avoids bloom overhead).
+            // Large list: bloom filter for fast rejection, then confirm with linear scan.
+            if values.len() <= 8 {
+                let mut result = Bitmap::zeroed();
+                for row in selection.iter_set_bits() {
+                    if row >= num_rows {
+                        break;
+                    }
+                    if values.contains(&col[row]) {
+                        result.set(row);
+                    }
+                }
+                return result;
+            }
+
+            // Build bloom filter from the values list.
+            let mut bf = BloomFilter::new(values.len(), 0.01);
+            for &v in values {
+                bf.insert(v as u32);
+            }
+
+            let mut result = Bitmap::zeroed();
+            for row in selection.iter_set_bits() {
+                if row >= num_rows {
+                    break;
+                }
+                let v = col[row];
+                // Fast rejection via bloom filter, then confirm.
+                if bf.contains(v as u32) && values.contains(&v) {
+                    result.set(row);
+                }
             }
             result
         }
@@ -369,6 +413,10 @@ pub fn expr_to_string(expr: &Expr) -> String {
             let parts: Vec<_> = children.iter().map(expr_to_string).collect();
             format!("({})", parts.join(" OR "))
         }
+        Expr::In(col_idx, values) => {
+            let vals: Vec<String> = values.iter().map(|v| v.to_string()).collect();
+            format!("col{} IN ({})", col_idx, vals.join(", "))
+        }
     }
 }
 
@@ -437,6 +485,7 @@ mod tests {
             Expr::Not(inner) => !eval_row(inner, columns, row),
             Expr::And(children) => children.iter().all(|c| eval_row(c, columns, row)),
             Expr::Or(children) => children.iter().any(|c| eval_row(c, columns, row)),
+            Expr::In(col_idx, values) => values.contains(&columns[*col_idx][row]),
         }
     }
 
@@ -470,7 +519,7 @@ mod tests {
                     BinOp::GtEq => (lv >= rv) as i64,
                 }
             }
-            Expr::Not(_) | Expr::And(_) | Expr::Or(_) => 0,
+            Expr::Not(_) | Expr::And(_) | Expr::Or(_) | Expr::In(_, _) => 0,
         }
     }
 
@@ -875,5 +924,73 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn in_expression_small_list() {
+        let col0 = vec![10, 50, 100, 150, 200];
+        let columns = vec![col0];
+        let n = 5;
+        let sel = all_selected(n);
+
+        let expr = Expr::In(0, vec![50, 150]);
+        let result = evaluate_expr(&expr, &columns, &sel, n);
+        let expected = naive_eval(&expr, &columns, n);
+        assert_eq!(bitmap_to_bools(&result, n), expected);
+        assert!(!result.get(0)); // 10 not in {50, 150}
+        assert!(result.get(1)); // 50 in {50, 150}
+        assert!(!result.get(2)); // 100 not in {50, 150}
+        assert!(result.get(3)); // 150 in {50, 150}
+        assert!(!result.get(4)); // 200 not in {50, 150}
+    }
+
+    #[test]
+    fn in_expression_large_list_uses_bloom() {
+        let col0: Vec<i64> = (0..20).map(|i| i * 10).collect();
+        let columns = vec![col0];
+        let n = 20;
+        let sel = all_selected(n);
+
+        // 10 values, which exceeds the small-list threshold of 8
+        let values: Vec<i64> = vec![0, 30, 50, 70, 100, 130, 150, 170, 190, 200];
+        let expr = Expr::In(0, values);
+        let result = evaluate_expr(&expr, &columns, &sel, n);
+        let expected = naive_eval(&expr, &columns, n);
+        assert_eq!(bitmap_to_bools(&result, n), expected);
+    }
+
+    #[test]
+    fn in_expression_empty_list() {
+        let col0 = vec![10, 50, 100];
+        let columns = vec![col0];
+        let n = 3;
+        let sel = all_selected(n);
+
+        let expr = Expr::In(0, vec![]);
+        let result = evaluate_expr(&expr, &columns, &sel, n);
+        // Empty IN list matches nothing
+        assert!(!result.get(0));
+        assert!(!result.get(1));
+        assert!(!result.get(2));
+    }
+
+    #[test]
+    fn in_expression_no_match() {
+        let col0 = vec![10, 20, 30];
+        let columns = vec![col0];
+        let n = 3;
+        let sel = all_selected(n);
+
+        let expr = Expr::In(0, vec![99, 100, 101]);
+        let result = evaluate_expr(&expr, &columns, &sel, n);
+        assert!(!result.get(0));
+        assert!(!result.get(1));
+        assert!(!result.get(2));
+    }
+
+    #[test]
+    fn in_expr_to_string() {
+        let expr = Expr::In(2, vec![1, 2, 3]);
+        assert_eq!(expr_to_string(&expr), "col2 IN (1, 2, 3)");
     }
 }
