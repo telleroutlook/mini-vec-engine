@@ -10,6 +10,8 @@
 
 A from-scratch vectorized query engine for learning database kernel internals — columnar processing, selection bitmaps, late materialization, and parallel hash aggregation with rigorous benchmarking and differential correctness testing.
 
+> **Origin:** This project was built to learn DataFusion's vectorized execution core by reimplementing its key techniques from scratch. It is intentionally minimal and makes no claim to compete with DataFusion.
+
 </div>
 
 ---
