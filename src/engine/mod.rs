@@ -35,6 +35,7 @@ pub struct QueryParams {
 }
 
 pub mod aggregate;
+pub mod arena_agg;
 pub mod data_gen;
 pub mod instrumented;
 pub mod naive;

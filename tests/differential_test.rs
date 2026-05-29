@@ -24,10 +24,14 @@ fn run_differential(
     let early = engine::vectorized::execute_early(&batches, &params);
     let late = engine::vectorized::execute_late(&batches, &params);
     let parallel = engine::parallel::execute(&batches, &params);
+    let partitioned = engine::parallel::execute_partitioned(&batches, &params);
+    let adaptive = engine::parallel::adaptive_execute_partitioned(&batches, &params);
 
     assert_eq!(naive, early, "Early materialization mismatch");
     assert_eq!(naive, late, "Late materialization mismatch");
     assert_eq!(naive, parallel, "Parallel mismatch");
+    assert_eq!(naive, partitioned, "Partitioned mismatch");
+    assert_eq!(naive, adaptive, "Adaptive partitioned mismatch");
 }
 
 #[test]
